@@ -1,2 +1,2 @@
 # testing_bloc_project
-Here is my road of learning Bloc and Cubit. 
+In this repository will be my road of learning Bloc and Cubit.
