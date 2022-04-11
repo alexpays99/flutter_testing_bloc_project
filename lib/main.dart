@@ -1,6 +1,16 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:bloc/bloc.dart';
-import 'dart:math' as math show Random;
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:testing_bloc_project/bloc/bloc_actions.dart';
+import 'dart:developer' as devtools show log;
+
+import 'package:testing_bloc_project/bloc/person.dart';
+import 'package:testing_bloc_project/bloc/persons_bloc.dart';
+
+extension Log on Object {
+  void log() => devtools.log(toString());
+}
 
 void main() {
   runApp(const MyApp());
@@ -16,80 +26,78 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(),
+      home: BlocProvider(
+        create: (_) => PersonsBloc(),
+        child: const MyHomePage(),
+      ),
     );
   }
 }
 
-const names = ['Foo', 'Bar', 'Baz'];
+Future<Iterable<Person>> getPersons(String url) => HttpClient()
+    .getUrl(Uri.parse(url))
+    .then((req) => req.close())
+    .then((resp) => resp.transform(utf8.decoder).join())
+    .then((str) => json.decode(str) as List<dynamic>)
+    .then((list) => list.map((e) => Person.fromJson(e)));
 
-extension RandomElement<T> on Iterable<T> {
-  T getRandomElement() => elementAt(math.Random().nextInt(length));
+extension HttpClientResponseJsonDecode on HttpClientResponse {
+  Future<dynamic> jsonDecode() async {
+    return transform(utf8.decoder).toList().then((value) {
+      final result = value.join();
+      return result;
+    }).then<dynamic>((v) => json.decode(v));
+  }
 }
 
-class NamesCubit extends Cubit<String?> {
-  NamesCubit() : super(null);
+extension Subscript<T> on Iterable<T> {
+  T? operator [](int index) => length > index ? elementAt(index) : null;
+}
 
-  void pickRandomName() => emit(names.getRandomElement());
-  //this state gives you the current state of this cubit. it's state has value null
-} // we can produce a new state using function emit()
-
-class MyHomePage extends StatefulWidget {
+class MyHomePage extends StatelessWidget {
   const MyHomePage({Key? key}) : super(key: key);
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  late final NamesCubit cubit; // late means that it will be initialized before we'll use it
-
-  // init Cubit
-  @override
-  void initState() {
-    super.initState();
-    cubit = NamesCubit();
-  }
-
-  // dispose Cubit
-  @override
-  void dispose() {
-    cubit.close();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home Page'),
-      ),
-      body: StreamBuilder<String?>(
-        stream: cubit.stream,
-        //initialData: initialData,
-        builder: (BuildContext context, AsyncSnapshot snapshot) {
-          final button = TextButton(
-              onPressed: () => cubit.pickRandomName(),
-              child: const Text('Pick a random name')
-          );
-          switch (snapshot.connectionState) {
-             
-            case ConnectionState.none:
-              return button;
-            case ConnectionState.waiting:
-              return button;
-            case ConnectionState.active:
-              return Column(
-                children: [
-                  Text(snapshot.data ?? ''),
-                  button
-                ],
-              );
-            case ConnectionState.done:
-              return const SizedBox();
+      appBar: AppBar(title: const Text('Home Page')),
+      body: Column(children: [
+        Row(
+          children: [
+            TextButton(
+                onPressed: () {
+                  context.read<PersonsBloc>().add(const LoadPersonsAction(
+                      url: persons1Url, loader: getPersons));
+                },
+                child: const Text('Load json #1')),
+            TextButton(
+                onPressed: () {
+                  context.read<PersonsBloc>().add(const LoadPersonsAction(
+                      url: persons2Url, loader: getPersons));
+                },
+                child: const Text('Load json #2')),
+          ],
+        ),
+        BlocBuilder<PersonsBloc, FetchResult?>(
+            buildWhen: ((previousResult, currentResult) {
+          return previousResult?.persons != currentResult?.persons;
+        }), builder: ((context, fetchResult) {
+          fetchResult?.log();
+          final persons = fetchResult?.persons;
+          if (persons == null) {
+            return const SizedBox();
           }
-        },
-      ),
+          return Expanded(
+            child: ListView.builder(
+              itemCount: persons.length,
+              itemBuilder: (BuildContext context, int index) {
+                final person = persons[index]!;
+                return ListTile(title: Text(person.name));
+              },
+            ),
+          );
+        }))
+      ]),
     );
   }
 }
