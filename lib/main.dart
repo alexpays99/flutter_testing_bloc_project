@@ -1,12 +1,18 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:testing_bloc_project/bloc/bloc_actions.dart';
 import 'dart:developer' as devtools show log;
 
-import 'package:testing_bloc_project/bloc/person.dart';
-import 'package:testing_bloc_project/bloc/persons_bloc.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:testing_bloc_project/apis/login_api.dart';
+import 'package:testing_bloc_project/apis/notes_api.dart';
+import 'package:testing_bloc_project/bloc/actions.dart';
+import 'package:testing_bloc_project/bloc/app_bloc.dart';
+import 'package:testing_bloc_project/bloc/app_state.dart';
+import 'package:testing_bloc_project/dialogs/generic_dialog.dart';
+import 'package:testing_bloc_project/dialogs/loading_screen.dart';
+import 'package:testing_bloc_project/models.dart';
+import 'package:testing_bloc_project/strings.dart';
+import 'package:testing_bloc_project/views/iterable_list_view.dart';
+import 'package:testing_bloc_project/views/login_view.dart';
 
 extension Log on Object {
   void log() => devtools.log(toString());
@@ -26,78 +32,74 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: BlocProvider(
-        create: (_) => PersonsBloc(),
-        child: const MyHomePage(),
-      ),
+      home: const HomePage(),
     );
   }
 }
 
-Future<Iterable<Person>> getPersons(String url) => HttpClient()
-    .getUrl(Uri.parse(url))
-    .then((req) => req.close())
-    .then((resp) => resp.transform(utf8.decoder).join())
-    .then((str) => json.decode(str) as List<dynamic>)
-    .then((list) => list.map((e) => Person.fromJson(e)));
-
-extension HttpClientResponseJsonDecode on HttpClientResponse {
-  Future<dynamic> jsonDecode() async {
-    return transform(utf8.decoder).toList().then((value) {
-      final result = value.join();
-      return result;
-    }).then<dynamic>((v) => json.decode(v));
-  }
-}
-
-extension Subscript<T> on Iterable<T> {
-  T? operator [](int index) => length > index ? elementAt(index) : null;
-}
-
-class MyHomePage extends StatelessWidget {
-  const MyHomePage({Key? key}) : super(key: key);
+class HomePage extends StatelessWidget {
+  const HomePage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Home Page')),
-      body: Column(children: [
-        Row(
-          children: [
-            TextButton(
-                onPressed: () {
-                  context.read<PersonsBloc>().add(const LoadPersonsAction(
-                      url: persons1Url, loader: getPersons));
-                },
-                child: const Text('Load json #1')),
-            TextButton(
-                onPressed: () {
-                  context.read<PersonsBloc>().add(const LoadPersonsAction(
-                      url: persons2Url, loader: getPersons));
-                },
-                child: const Text('Load json #2')),
-          ],
+    return BlocProvider(
+      create: (context) => AppBloc(
+        loginApi: LoginApi(),
+        notesApi: const NotesApi(),
+      ),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(homePage),
         ),
-        BlocBuilder<PersonsBloc, FetchResult?>(
-            buildWhen: ((previousResult, currentResult) {
-          return previousResult?.persons != currentResult?.persons;
-        }), builder: ((context, fetchResult) {
-          fetchResult?.log();
-          final persons = fetchResult?.persons;
-          if (persons == null) {
-            return const SizedBox();
-          }
-          return Expanded(
-            child: ListView.builder(
-              itemCount: persons.length,
-              itemBuilder: (BuildContext context, int index) {
-                final person = persons[index]!;
-                return ListTile(title: Text(person.name));
-              },
-            ),
-          );
-        }))
-      ]),
+        body: BlocConsumer<AppBloc, AppState>(
+          listener: (context, appState) {
+            // loading screen
+            if (appState.isLoading) {
+              LoadingSCreen.instance().show(
+                context: context,
+                text: pleaseWait,
+              );
+            } else {
+              LoadingSCreen.instance().hide();
+            }
+            // display possible errors
+            final loginError = appState.loginError;
+            if (loginError != null) {
+              shoGenericDialog<bool>(
+                context: context,
+                title: loginErrorDialogTitle,
+                content: loginErrorDialogContent,
+                optionsBuilder: () => {ok: true},
+              );
+            }
+
+            // if we are loggen in, but we have now fetched notes, fetch them now
+            if (appState.isLoading == false &&
+                appState.loginError == null &&
+                appState.loginHandle == const LoginHandle.fooBar() &&
+                appState.fetchNotes == null) {
+              context.read<AppBloc>().add(const LoadNotesAction());
+            }
+          },
+          builder: (context, appState) {
+            final notes = appState.fetchNotes;
+            if (notes == null) {
+              return LoginView(
+                onLoginTapped: (email, password) {
+                  context.read<AppBloc>().add(
+                        LoginAction(
+                          email: email,
+                          password: password,
+                        ),
+                      );
+                },
+              );
+            } else {
+              return notes.toListView();
+            }
+          },
+        ),
+      ),
     );
   }
 }
