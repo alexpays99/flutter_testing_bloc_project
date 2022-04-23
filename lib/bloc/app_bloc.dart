@@ -1,80 +1,63 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:testing_bloc_project/apis/login_api.dart';
-import 'package:testing_bloc_project/apis/notes_api.dart';
-import 'package:testing_bloc_project/bloc/actions.dart';
-import 'package:testing_bloc_project/bloc/app_state.dart';
-import 'package:testing_bloc_project/models.dart';
+import 'dart:typed_data';
 
-class AppBloc extends Bloc<AppAction, AppState> {
-  // we'll not bound concrete implementations of apis, we should bring here an interface of LoginApiProtocol and NotesApiProtocol
-  final LoginApiProtocol loginApi;
-  final NotesApiProtocol notesApi;
-  final LoginHandle acceptedLoginHAndle;
+import 'package:bloc/bloc.dart';
+import 'package:flutter/services.dart';
+import 'package:testing_bloc_project/bloc/app_state.dart';
+import 'package:testing_bloc_project/bloc/bloc_events.dart';
+import 'dart:math' as math;
+
+// Put just list of Url's creaets some problems testing and makes bloc difficult to test.
+//T o make it more testable, we can pun list of Url's in function as a parameter.
+typedef AppBlocRandomUrlPicker = String Function(Iterable<String> allUrls);
+typedef AppBlocUrlLoader = Future<Uint8List> Function(String url);
+
+extension RandomElement<T> on Iterable<T> {
+  T getRandomElement() => elementAt(math.Random().nextInt(length));
+}
+
+class AppBloc extends Bloc<AppEvent, AppState> {
+  String _pickRandomUrl(Iterable<String> allUrls) => allUrls.getRandomElement();
+  Future<Uint8List> _loadUrt(String url) => NetworkAssetBundle(Uri.parse(url))
+      .load(url)
+      .then((byteData) => byteData.buffer.asUint8List());
 
   AppBloc({
-    required this.loginApi,
-    required this.notesApi,
-    required this.acceptedLoginHAndle,
+    required Iterable<String> urls,
+    Duration? waitBeforeLoading,
+    AppBlocRandomUrlPicker? urlPicker,
+    AppBlocUrlLoader? urlLoader,
   }) : super(const AppState.empty()) {
-    on<LoginAction>((event, emit) async {
+    on<LoadNextUrlEvent>((event, emit) async {
       // start loading
       emit(
         const AppState(
           isLoading: true,
-          loginError: null,
-          loginHandle: null,
-          fetchNotes: null,
+          data: null,
+          error: null,
         ),
       );
-      // log the user in
-      final loginHandle = await loginApi.login(
-        email: event.email,
-        password: event.password,
-      );
-      emit(
-        AppState(
-          isLoading: false,
-          loginError: loginHandle == null ? LoginErrors.invalidHandle : null,
-          loginHandle: loginHandle,
-          fetchNotes: null,
-        ),
-      );
-    });
-    on<LoadNotesAction>((event, emit) async {
-      // start loading
-      emit(
-        AppState(
-          isLoading: true,
-          loginError: null,
-          loginHandle: state.loginHandle, // it's state that any bloc holds on.
-          fetchNotes: null,
-        ),
-      );
-
-      // get the login handle
-      final loginHandle = state.loginHandle;
-      if (loginHandle != const LoginHandle.fooBar()) {
+      final url = (urlPicker ?? _pickRandomUrl)(urls);
+      try {
+        if (waitBeforeLoading != null) {
+          await Future.delayed(waitBeforeLoading);
+        }
+        final data = await (urlLoader ?? _loadUrt)(url);
         emit(
           AppState(
             isLoading: false,
-            loginError: LoginErrors.invalidHandle,
-            loginHandle: loginHandle, // it's state that any bloc holds on
-            fetchNotes: null,
+            data: data,
+            error: null,
           ),
         );
-        return;
+      } catch (e) {
+        emit(
+          AppState(
+            isLoading: false,
+            data: null,
+            error: e,
+          ),
+        );
       }
-
-      // we have a valid login handle and want to fetch notes
-      final notes = await notesApi.getNotes(loginHandle: loginHandle!);
-      emit(
-        AppState(
-          isLoading: false,
-          loginError: state.loginError,
-          loginHandle: loginHandle, // it's state that any bloc holds on
-          fetchNotes: notes,
-        ),
-      );
     });
   }
 }
