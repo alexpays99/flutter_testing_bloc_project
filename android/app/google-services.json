@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "15602731483",
+    "project_id": "bloc-photo-library-17a58",
+    "storage_bucket": "bloc-photo-library-17a58.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:15602731483:android:5ac1da54a8fe32b6647ffe",
+        "android_client_info": {
+          "package_name": "com.example.testing_bloc_project"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "15602731483-tdos51ji7icgo6m3vq6s01f49am2vuq6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyjN-uLKx-iFNG8VBcaR0WDV6yuzdgB6w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "15602731483-tdos51ji7icgo6m3vq6s01f49am2vuq6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
